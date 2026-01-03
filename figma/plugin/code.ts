@@ -330,7 +330,43 @@ function isLightColor(color: RGB | RGBA): boolean {
   return luminance > 0.5; // Consider light if luminance > 50%
 }
 
-// Create dot grid pattern like OpenAI's approach
+// Create checkerboard pattern for transparency display (Figma-style)
+function createCheckerboardPattern(size: number): FrameNode {
+  const frame = figma.createFrame();
+  frame.name = 'Checkerboard Pattern';
+  frame.resize(size, size);
+  frame.clipsContent = true;
+  frame.fills = [];
+
+  // Standard checkerboard colors: white and light gray
+  const color1 = { r: 1, g: 1, b: 1 };      // White
+  const color2 = { r: 0.9, g: 0.9, b: 0.9 }; // Light gray
+
+  // Size of each square in the checkerboard
+  const squareSize = 4;
+
+  const cols = Math.ceil(size / squareSize);
+  const rows = Math.ceil(size / squareSize);
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const square = figma.createRectangle();
+      square.resize(squareSize, squareSize);
+      square.x = col * squareSize;
+      square.y = row * squareSize;
+      
+      // Alternate colors for checkerboard pattern
+      const isEven = (row + col) % 2 === 0;
+      square.fills = [{ type: 'SOLID', color: isEven ? color1 : color2 }];
+      
+      frame.appendChild(square);
+    }
+  }
+
+  return frame;
+}
+
+// Create dot grid pattern like OpenAI's approach (kept for backward compatibility if needed)
 function createTransparencyPattern(size: number, useDarkPattern: boolean = false): FrameNode {
   const frame = figma.createFrame();
   frame.name = 'Transparency Pattern';
@@ -376,32 +412,76 @@ function createColorSwatch(color: RGB | RGBA, size: number = LAYOUT.swatchSize):
   container.fills = [];
   container.clipsContent = true;
   container.cornerRadius = LAYOUT.borderRadius;
+  container.strokes = [{ type: 'SOLID', color: COLORS.gray200 }];
+  container.strokeWeight = 1;
 
-  // Add transparency pattern if color has alpha
-  // Use dark pattern for light colors so transparency is visible
-  if (hasAlpha(color as RGBA)) {
-    const useDarkPattern = isLightColor(color);
-    const pattern = createTransparencyPattern(size, useDarkPattern);
-    container.appendChild(pattern);
-    pattern.x = 0;
-    pattern.y = 0;
+  const hasTransparency = hasAlpha(color as RGBA);
+  const alpha = hasTransparency ? (color as RGBA).a : 1;
+
+  if (!hasTransparency || alpha === 1) {
+    // Opaque color: show solid color on entire area
+    const colorRect = figma.createRectangle();
+    colorRect.name = 'Color';
+    colorRect.resize(size, size);
+    colorRect.cornerRadius = LAYOUT.borderRadius;
+    colorRect.fills = [{
+      type: 'SOLID',
+      color: { r: color.r, g: color.g, b: color.b },
+      opacity: 1,
+    }];
+    container.appendChild(colorRect);
+    colorRect.x = 0;
+    colorRect.y = 0;
+  } else {
+    // Transparent color: split-view approach
+    const halfWidth = size / 2;
+
+    // Left half: solid color (no transparency)
+    const leftRect = figma.createRectangle();
+    leftRect.name = 'Color Solid';
+    leftRect.resize(halfWidth, size);
+    leftRect.cornerRadius = 0;
+    leftRect.fills = [{
+      type: 'SOLID',
+      color: { r: color.r, g: color.g, b: color.b },
+      opacity: 1,
+    }];
+    container.appendChild(leftRect);
+    leftRect.x = 0;
+    leftRect.y = 0;
+
+    // Right half: checkerboard pattern + color with transparency
+    const rightFrame = figma.createFrame();
+    rightFrame.name = 'Color Transparent';
+    rightFrame.resize(halfWidth, size);
+    rightFrame.fills = [];
+    rightFrame.clipsContent = true;
+    rightFrame.cornerRadius = 0;
+
+    // Add checkerboard pattern (full size, will be clipped by rightFrame)
+    const checkerboard = createCheckerboardPattern(size);
+    rightFrame.appendChild(checkerboard);
+    checkerboard.x = 0;
+    checkerboard.y = 0;
+
+    // Add color with transparency on top
+    const rightColorRect = figma.createRectangle();
+    rightColorRect.name = 'Color Overlay';
+    rightColorRect.resize(halfWidth, size);
+    rightColorRect.cornerRadius = 0;
+    rightColorRect.fills = [{
+      type: 'SOLID',
+      color: { r: color.r, g: color.g, b: color.b },
+      opacity: alpha,
+    }];
+    rightFrame.appendChild(rightColorRect);
+    rightColorRect.x = 0;
+    rightColorRect.y = 0;
+
+    container.appendChild(rightFrame);
+    rightFrame.x = halfWidth;
+    rightFrame.y = 0;
   }
-
-  // Add color rectangle
-  const colorRect = figma.createRectangle();
-  colorRect.name = 'Color';
-  colorRect.resize(size, size);
-  colorRect.cornerRadius = LAYOUT.borderRadius;
-  colorRect.fills = [{
-    type: 'SOLID',
-    color: { r: color.r, g: color.g, b: color.b },
-    opacity: hasAlpha(color as RGBA) ? (color as RGBA).a : 1,
-  }];
-  colorRect.strokes = [{ type: 'SOLID', color: COLORS.gray200 }];
-  colorRect.strokeWeight = 1;
-  container.appendChild(colorRect);
-  colorRect.x = 0;
-  colorRect.y = 0;
 
   return container;
 }
