@@ -1108,8 +1108,15 @@ async function generateTypographyTable(): Promise<FrameNode> {
     return name.split('/')[0] || '';
   };
 
-  // Sort by: prefix (alphabetically), then size category, then weight (heaviest first)
+  // Sort by: tabular styles last, then prefix (alphabetically), then size category, then weight (heaviest first)
   textStyles.sort((a, b) => {
+    // First check if either style is tabular - tabular styles go to the end
+    const isTabularA = a.name.toLowerCase().includes('tabular');
+    const isTabularB = b.name.toLowerCase().includes('tabular');
+    if (isTabularA !== isTabularB) {
+      return isTabularA ? 1 : -1; // Tabular styles come after non-tabular
+    }
+    // If both are tabular or both are not, continue with normal sorting
     // First by prefix
     const prefixA = getPrefix(a.name);
     const prefixB = getPrefix(b.name);
@@ -1233,7 +1240,13 @@ async function generateTypographyTable(): Promise<FrameNode> {
     const nameLower = styleName.toLowerCase();
     const weightLower = fontStyle.toLowerCase();
     const isHeading = nameLower.includes('heading');
+    const isTabular = nameLower.includes('tabular');
     const isNormalWeight = weightLower.includes('regular') || weightLower.includes('normal');
+
+    // Tabular numbers styles should show numeric example text
+    if (isTabular) {
+      return '0123456789';
+    }
 
     if (isHeading) {
       return 'Page title example';
@@ -1262,8 +1275,9 @@ async function generateTypographyTable(): Promise<FrameNode> {
     const nameLowerCheck = style.name.toLowerCase();
     const weightLowerCheck = style.fontName.style.toLowerCase();
     const isHeadingCheck = nameLowerCheck.includes('heading');
+    const isTabularCheck = nameLowerCheck.includes('tabular');
     const isNormalWeightCheck = weightLowerCheck.includes('regular') || weightLowerCheck.includes('normal');
-    const willShowParagraph = !isHeadingCheck && isNormalWeightCheck && style.fontSize <= 18;
+    const willShowParagraph = !isHeadingCheck && !isTabularCheck && isNormalWeightCheck && style.fontSize <= 18;
 
     // Create example text (auto width for non-paragraph, fixed width for paragraph)
     const exampleTextNode = figma.createText();
@@ -1424,8 +1438,9 @@ async function generateTypographyTable(): Promise<FrameNode> {
     const nameLower = style.name.toLowerCase();
     const weightLower = style.fontName.style.toLowerCase();
     const isHeading = nameLower.includes('heading');
+    const isTabular = nameLower.includes('tabular');
     const isNormalWeight = weightLower.includes('regular') || weightLower.includes('normal');
-    const showParagraph = !isHeading && isNormalWeight && style.fontSize <= 18;
+    const showParagraph = !isHeading && !isTabular && isNormalWeight && style.fontSize <= 18;
 
     if (showParagraph) {
       // Add "Body text example" title above paragraph
