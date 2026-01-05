@@ -1785,6 +1785,15 @@ figma.ui.onmessage = async (msg: { type: string; collectionIds?: string[] }) => 
       figma.ui.postMessage({ type: 'effects-complete' });
     }
 
+    if (msg.type === 'fix-descriptions') {
+      const result = await fixDescriptions();
+      figma.ui.postMessage({
+        type: 'fix-descriptions-complete',
+        count: result.fixedCount
+      });
+      figma.notify(`Fixed ${result.fixedCount} variable description(s)`);
+    }
+
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -1792,3 +1801,49 @@ figma.ui.onmessage = async (msg: { type: string; collectionIds?: string[] }) => 
     figma.ui.postMessage({ type: 'generation-error', message: errorMessage });
   }
 };
+
+// ============================================================================
+// Fix Variable Descriptions
+// ============================================================================
+
+/**
+ * Fixes variable descriptions by:
+ * 1. Removing pixel values like "(12px)" or "(16px)" from descriptions
+ * 2. Ensuring descriptions don't contain raw values, only explanatory text
+ */
+async function fixDescriptions(): Promise<{ fixedCount: number }> {
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  let fixedCount = 0;
+
+  // Pattern to match values in parentheses like (12px), (16px), etc.
+  const valuePattern = /\s*\(\d+(?:\.\d+)?px\)\s*/g;
+
+  for (const collection of collections) {
+    for (const variableId of collection.variableIds) {
+      const variable = await figma.variables.getVariableByIdAsync(variableId);
+      if (!variable) continue;
+
+      const originalDescription = variable.description || '';
+
+      // Skip if no description
+      if (!originalDescription) continue;
+
+      // Check if description contains values to remove
+      if (valuePattern.test(originalDescription)) {
+        // Reset pattern lastIndex for next use
+        valuePattern.lastIndex = 0;
+
+        // Remove value patterns from description
+        const newDescription = originalDescription.replace(valuePattern, '').trim();
+
+        // Only update if description actually changed
+        if (newDescription !== originalDescription) {
+          variable.description = newDescription;
+          fixedCount++;
+        }
+      }
+    }
+  }
+
+  return { fixedCount };
+}

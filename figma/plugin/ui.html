@@ -233,6 +233,7 @@
     <button class="btn-primary" id="generate" disabled>Generate Documentation</button>
     <button class="btn-secondary" id="generateTypography">Generate Text Styles Table</button>
     <button class="btn-secondary" id="generateEffects">Generate Effects Table</button>
+    <button class="btn-secondary" id="fixDescriptions">Fix Variable Descriptions</button>
 
     <div class="loading" id="loading">
       <div class="spinner"></div>
@@ -284,6 +285,16 @@
       }
 
       if (msg.type === 'effects-error') {
+        hideLoading();
+        showStatus('error', msg.message);
+      }
+
+      if (msg.type === 'fix-descriptions-complete') {
+        hideLoading();
+        showStatus('success', `Fixed descriptions for ${msg.count} variable(s)!`);
+      }
+
+      if (msg.type === 'fix-descriptions-error') {
         hideLoading();
         showStatus('error', msg.message);
       }
@@ -406,6 +417,16 @@
       parent.postMessage({
         pluginMessage: {
           type: 'generate-effects'
+        }
+      }, '*');
+    };
+
+    // Fix Variable Descriptions
+    document.getElementById('fixDescriptions').onclick = () => {
+      showLoading();
+      parent.postMessage({
+        pluginMessage: {
+          type: 'fix-descriptions'
         }
       }, '*');
     };
