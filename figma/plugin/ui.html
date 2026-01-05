@@ -18,52 +18,9 @@
       min-height: 100vh;
     }
 
-    /* Tab Navigation */
-    .tab-nav {
-      display: flex;
-      border-bottom: 1px solid #e0e0e0;
-      padding: 0 24px;
-      background: #fafafa;
-    }
-
-    .tab-btn {
-      padding: 16px 20px;
-      background: none;
-      border: none;
-      font-size: 14px;
-      font-weight: 500;
-      color: #6b6b6b;
-      cursor: pointer;
-      position: relative;
-      transition: color 0.15s ease;
-    }
-
-    .tab-btn:hover {
-      color: #1a1a1a;
-    }
-
-    .tab-btn.active {
-      color: #1a1a1a;
-    }
-
-    .tab-btn.active::after {
-      content: '';
-      position: absolute;
-      bottom: -1px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #1a1a1a;
-    }
-
-    /* Tab Content */
-    .tab-content {
-      display: none;
+    /* Main Content */
+    .content {
       padding: 24px;
-    }
-
-    .tab-content.active {
-      display: block;
     }
 
     h2 {
@@ -254,65 +211,13 @@
       background: #fef2f2;
       color: #dc2626;
     }
-
-    /* Components Tab Styles */
-    .component-section {
-      margin-bottom: 24px;
-    }
-
-    .component-section h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1a1a1a;
-      margin-bottom: 8px;
-    }
-
-    .component-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-    }
-
-    .component-item {
-      display: flex;
-      align-items: center;
-      padding: 8px 12px;
-      cursor: pointer;
-      transition: background 0.15s ease;
-      border-radius: 4px;
-    }
-
-    .component-item:hover {
-      background: #f8f8f8;
-    }
-
-    .component-item input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      margin-right: 10px;
-      cursor: pointer;
-      accent-color: #2563eb;
-    }
-
-    .component-item .collection-name {
-      font-size: 13px;
-      font-weight: 400;
-      color: #1a1a1a;
-    }
   </style>
 </head>
 
 <body>
-  <!-- Tab Navigation -->
-  <div class="tab-nav">
-    <button class="tab-btn active" data-tab="documentation">Documentation</button>
-    <button class="tab-btn" data-tab="components">Components</button>
-    <button class="tab-btn" data-tab="icons">Icons</button>
-  </div>
-
-  <!-- Documentation Tab -->
-  <div class="tab-content active" id="tab-documentation">
-    <h2>UI Kit</h2>
+  <!-- Main Content -->
+  <div class="content">
+    <h2>Base UI</h2>
     <p class="description">Generate documentation tables from your Variable Collections. Select the collections you want
       to document.</p>
 
@@ -337,101 +242,8 @@
     <div class="status" id="status"></div>
   </div>
 
-  <!-- Components Tab -->
-  <div class="tab-content" id="tab-components">
-    <h2>Components</h2>
-    <p class="description">Generate UI component libraries with all variants, sizes, and states.</p>
-
-    <div class="component-section">
-      <h3>Buttons</h3>
-      <div class="component-grid">
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="primary">
-          <span class="collection-name">Primary</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="secondary">
-          <span class="collection-name">Secondary</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="success">
-          <span class="collection-name">Success</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="info">
-          <span class="collection-name">Info</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="discovery">
-          <span class="collection-name">Discovery</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="danger">
-          <span class="collection-name">Danger</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="warning">
-          <span class="collection-name">Warning</span>
-        </label>
-        <label class="component-item">
-          <input type="checkbox" name="buttonColor" value="caution">
-          <span class="collection-name">Caution</span>
-        </label>
-        <button class="btn-primary" id="generateButtons" style="margin-top: 12px;">Generate Selected Buttons</button>
-      </div>
-    </div>
-
-    <div class="component-section">
-      <h3>Input</h3>
-      <div class="component-grid">
-        <button class="btn-primary" id="generateInputs" style="margin-top: 0;">Generate Input Components</button>
-      </div>
-    </div>
-
-    <div class="loading" id="componentsLoading">
-      <div class="spinner"></div>
-      <span>Generating components...</span>
-    </div>
-
-    <div class="status" id="componentsStatus"></div>
-  </div>
-
-  <!-- Icons Tab -->
-  <div class="tab-content" id="tab-icons">
-    <h2>Icons</h2>
-    <p class="description">Select icon components and update them: flatten layers, rename to kebab-case, and add
-      searchable tags.</p>
-
-    <button class="btn-primary" id="generateIcons">Update Selected Icons</button>
-    <button class="btn-primary" id="groupIcons" style="margin-top: 8px;">Group Icons by Category</button>
-
-    <div class="loading" id="iconsLoading">
-      <div class="spinner"></div>
-      <span>Processing icons...</span>
-    </div>
-
-    <div class="status" id="iconsStatus"></div>
-  </div>
-
-
   <script>
     let collections = [];
-
-    // Tab Navigation
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        // Update active tab button
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        // Update active tab content
-        const tabId = btn.dataset.tab;
-        document.querySelectorAll('.tab-content').forEach(content => {
-          content.classList.remove('active');
-        });
-        document.getElementById(`tab-${tabId}`).classList.add('active');
-      });
-    });
 
     // Request collections from plugin
     parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
@@ -476,37 +288,6 @@
         showStatus('error', msg.message);
       }
 
-      // Components tab messages
-      if (msg.type === 'buttons-complete') {
-        hideComponentsLoading();
-        showComponentsStatus('success', 'Button library generated successfully!');
-      }
-
-      if (msg.type === 'buttons-error') {
-        hideComponentsLoading();
-        showComponentsStatus('error', msg.message);
-      }
-
-      if (msg.type === 'inputs-complete') {
-        hideComponentsLoading();
-        showComponentsStatus('success', 'Input component set generated successfully!');
-      }
-
-      if (msg.type === 'inputs-error') {
-        hideComponentsLoading();
-        showComponentsStatus('error', msg.message);
-      }
-
-      // Icons tab messages
-      if (msg.type === 'icons-complete') {
-        hideIconsLoading();
-        showIconsStatus('success', `Generated ${msg.count} icon(s) successfully!`);
-      }
-
-      if (msg.type === 'icons-error') {
-        hideIconsLoading();
-        showIconsStatus('error', msg.message);
-      }
     };
 
     function renderCollections() {
@@ -584,37 +365,6 @@
       status.textContent = message;
     }
 
-    // Components tab loading/status functions
-    function showComponentsLoading() {
-      document.getElementById('componentsLoading').classList.add('visible');
-      document.getElementById('componentsStatus').className = 'status';
-    }
-
-    function hideComponentsLoading() {
-      document.getElementById('componentsLoading').classList.remove('visible');
-    }
-
-    function showComponentsStatus(type, message) {
-      const status = document.getElementById('componentsStatus');
-      status.className = `status ${type}`;
-      status.textContent = message;
-    }
-
-    // Icons tab loading/status functions
-    function showIconsLoading() {
-      document.getElementById('iconsLoading').classList.add('visible');
-      document.getElementById('iconsStatus').className = 'status';
-    }
-
-    function hideIconsLoading() {
-      document.getElementById('iconsLoading').classList.remove('visible');
-    }
-
-    function showIconsStatus(type, message) {
-      const status = document.getElementById('iconsStatus');
-      status.className = `status ${type}`;
-      status.textContent = message;
-    }
 
     // Toggle Select All / Deselect All
     document.getElementById('toggleSelect').onclick = () => {
@@ -660,185 +410,6 @@
       }, '*');
     };
 
-    // Generate Buttons - sequential generation to prevent Figma crash
-    let isGeneratingButtons = false;
-    let buttonColorsQueue = [];
-    let currentColorIndex = 0;
-
-    async function generateNextButtonColor() {
-      if (currentColorIndex >= buttonColorsQueue.length) {
-        // All colors generated
-        isGeneratingButtons = false;
-        hideComponentsLoading();
-        showComponentsStatus('success', `Generated ${buttonColorsQueue.length} button set(s) successfully!`);
-        buttonColorsQueue = [];
-        currentColorIndex = 0;
-        return;
-      }
-
-      const color = buttonColorsQueue[currentColorIndex];
-      // Update loading message to show initial progress
-      const loadingSpan = document.querySelector('#componentsLoading span');
-      if (loadingSpan) {
-        loadingSpan.textContent = `Generating ${color} (${currentColorIndex + 1}/${buttonColorsQueue.length})...`;
-      }
-
-      parent.postMessage({
-        pluginMessage: {
-          type: 'generate-buttons',
-          colors: [color]
-        }
-      }, '*');
-    }
-
-    // Override the buttons-complete handler to continue with next style
-    const originalOnMessage = window.onmessage;
-    window.onmessage = (event) => {
-      const msg = event.data.pluginMessage;
-      if (!msg) return;
-
-      // Handle progress updates - always process them
-      if (msg.type === 'progress-update') {
-        const loadingSpan = document.querySelector('#componentsLoading span');
-        if (loadingSpan) {
-          if (msg.style === 'combining' && msg.state === 'variants') {
-            // Special message for combining variants
-            if (msg.color) {
-              loadingSpan.textContent = `Combining ${msg.color} variants... (${msg.currentTotal}/${msg.totalAll})`;
-            } else {
-              loadingSpan.textContent = `Combining variants... (${msg.currentTotal}/${msg.totalAll})`;
-            }
-          } else if (msg.color && msg.style && msg.state && msg.size && msg.currentTotal !== undefined && msg.totalAll !== undefined) {
-            // Full progress info available (Button)
-            const progressText = `${msg.color}: ${msg.style} ${msg.state} ${msg.size} (${msg.currentTotal}/${msg.totalAll})`;
-            loadingSpan.textContent = progressText;
-          } else if (msg.style && msg.state && msg.size && msg.currentTotal !== undefined && msg.totalAll !== undefined) {
-            // Full progress info available (Input, no color)
-            const progressText = `Input: ${msg.style} ${msg.state} ${msg.size} (${msg.currentTotal}/${msg.totalAll})`;
-            loadingSpan.textContent = progressText;
-          } else if (msg.color && msg.currentTotal !== undefined && msg.totalAll !== undefined) {
-            // Fallback if some data is missing (Button)
-            loadingSpan.textContent = `Generating ${msg.color}... (${msg.currentTotal}/${msg.totalAll})`;
-          } else if (msg.currentTotal !== undefined && msg.totalAll !== undefined) {
-            // Fallback if some data is missing (Input)
-            loadingSpan.textContent = `Generating Input... (${msg.currentTotal}/${msg.totalAll})`;
-          } else if (msg.color) {
-            // Minimal fallback (Button)
-            loadingSpan.textContent = `Generating ${msg.color}...`;
-          } else {
-            // Minimal fallback (Input)
-            loadingSpan.textContent = 'Generating Input...';
-          }
-        }
-        return;
-      }
-
-      // Handle color completion
-      if (msg.type === 'color-complete' && isGeneratingButtons) {
-        const loadingSpan = document.querySelector('#componentsLoading span');
-        if (loadingSpan) {
-          loadingSpan.textContent = `Completed ${msg.color} (${msg.currentTotal}/${msg.totalAll})`;
-        }
-        // Continue to next color after a short delay
-        setTimeout(() => {
-          currentColorIndex++;
-          if (currentColorIndex >= buttonColorsQueue.length) {
-            // All colors generated
-            isGeneratingButtons = false;
-            hideComponentsLoading();
-            showComponentsStatus('success', `Generated ${buttonColorsQueue.length} button set(s) successfully!`);
-            buttonColorsQueue = [];
-            currentColorIndex = 0;
-          } else {
-            generateNextButtonColor();
-          }
-        }, 100);
-        return;
-      }
-
-      // Handle sequential button generation (legacy, should not be used now)
-      if (msg.type === 'buttons-complete' && isGeneratingButtons) {
-        currentColorIndex++;
-        // Small delay to let Figma breathe before next color
-        setTimeout(generateNextButtonColor, 300);
-        return;
-      }
-
-      if (msg.type === 'buttons-error' && isGeneratingButtons) {
-        isGeneratingButtons = false;
-        hideComponentsLoading();
-        showComponentsStatus('error', msg.message);
-        buttonColorsQueue = [];
-        currentColorIndex = 0;
-        return;
-      }
-
-      // Handle Input completion (not dependent on button generation)
-      if (msg.type === 'inputs-complete') {
-        hideComponentsLoading();
-        showComponentsStatus('success', 'Input component set generated successfully!');
-        return;
-      }
-
-      if (msg.type === 'inputs-error') {
-        hideComponentsLoading();
-        showComponentsStatus('error', msg.message);
-        return;
-      }
-
-      // Call original handler for other messages
-      if (originalOnMessage) {
-        originalOnMessage(event);
-      }
-    };
-
-    document.getElementById('generateButtons').onclick = () => {
-      const checkboxes = document.querySelectorAll('input[name="buttonColor"]:checked');
-      const selectedColors = Array.from(checkboxes).map(cb => cb.value);
-
-      if (selectedColors.length === 0) {
-        showComponentsStatus('error', 'Please select at least one color');
-        return;
-      }
-
-      // Start sequential generation
-      isGeneratingButtons = true;
-      buttonColorsQueue = selectedColors;
-      currentColorIndex = 0;
-
-      showComponentsLoading();
-      generateNextButtonColor();
-    };
-
-    // Generate Inputs
-    document.getElementById('generateInputs').onclick = () => {
-      showComponentsLoading();
-      parent.postMessage({
-        pluginMessage: {
-          type: 'generate-inputs'
-        }
-      }, '*');
-    };
-
-    // Generate Icons
-    document.getElementById('generateIcons').onclick = () => {
-      showIconsLoading();
-      parent.postMessage({
-        pluginMessage: {
-          type: 'generate-icons'
-        }
-      }, '*');
-    };
-
-    // Group Icons by Category
-    document.getElementById('groupIcons').onclick = () => {
-      showIconsLoading();
-      parent.postMessage({
-        pluginMessage: {
-          type: 'group-icons'
-        }
-      }, '*');
-    };
 
 
   </script>

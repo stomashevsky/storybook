@@ -1,7 +1,7 @@
 {
-  "name": "ui-kit",
+  "name": "base-ui",
   "version": "1.0.0",
-  "description": "UI Kit Figma Plugin",
+  "description": "Base UI Figma Plugin",
   "main": "code.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",

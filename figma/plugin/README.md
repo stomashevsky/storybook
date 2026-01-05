@@ -1,6 +1,6 @@
 # Figma Plugin
 
-This is a Figma plugin for working with UI Kit. The plugin allows you to generate documentation, components, and icons from Figma.
+This is a Figma plugin for working with Base UI. The plugin allows you to generate documentation, components, and icons from Figma.
 
 ## Installation and Setup
 
