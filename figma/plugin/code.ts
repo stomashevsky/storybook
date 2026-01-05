@@ -55,8 +55,8 @@ const COLORS = {
 const LAYOUT = {
   columnWidths: {
     group: 100,
-    token: 120,
-    mode: 240,
+    token: 220,  // Increased from 120 to prevent truncation
+    mode: 400,   // Increased to fit very long reference paths
     description: 400,
     scope: 120,
     cssToken: 200,
@@ -1802,14 +1802,10 @@ figma.ui.onmessage = async (msg: { type: string; collectionIds?: string[] }) => 
   }
 };
 
-// ============================================================================
-// Fix Variable Descriptions
-// ============================================================================
-
 /**
  * Fixes variable descriptions by:
  * 1. Removing pixel values like "(12px)" or "(16px)" from descriptions
- * 2. Ensuring descriptions don't contain raw values, only explanatory text
+ * 2. Auto-generating missing token names and descriptions from variable paths
  */
 async function fixDescriptions(): Promise<{ fixedCount: number }> {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
@@ -1819,31 +1815,240 @@ async function fixDescriptions(): Promise<{ fixedCount: number }> {
   const valuePattern = /\s*\(\d+(?:\.\d+)?px\)\s*/g;
 
   for (const collection of collections) {
+    // Skip primitive collections (they don't need descriptions)
+    const collectionName = collection.name.toLowerCase();
+    if (collectionName.includes('primitive')) continue;
+
     for (const variableId of collection.variableIds) {
       const variable = await figma.variables.getVariableByIdAsync(variableId);
       if (!variable) continue;
 
+      // Skip hidden variables
+      if (variable.hiddenFromPublishing) continue;
+
       const originalDescription = variable.description || '';
+      let newDescription = originalDescription;
+      let wasModified = false;
 
-      // Skip if no description
-      if (!originalDescription) continue;
-
-      // Check if description contains values to remove
-      if (valuePattern.test(originalDescription)) {
-        // Reset pattern lastIndex for next use
+      // Step 1: Remove pixel value patterns from existing descriptions
+      if (valuePattern.test(newDescription)) {
         valuePattern.lastIndex = 0;
+        newDescription = newDescription.replace(valuePattern, '').trim();
+        wasModified = true;
+      }
 
-        // Remove value patterns from description
-        const newDescription = originalDescription.replace(valuePattern, '').trim();
+      // Step 2: Auto-generate description if empty (only human description, no token)
+      // Note: Token names should only be added manually when confirmed to exist in CSS
+      if (!newDescription) {
+        const generated = generateDescriptionFromPath(variable.name, variable.resolvedType);
 
-        // Only update if description actually changed
-        if (newDescription !== originalDescription) {
-          variable.description = newDescription;
-          fixedCount++;
+        if (generated) {
+          // Only add human-readable description, NOT the token name
+          newDescription = generated.humanDescription;
+          wasModified = true;
         }
+      }
+
+      // Step 3: Ensure description is in sentence case
+      // Format: "--token-name\nHuman description" or just "Human description"
+      if (newDescription) {
+        const convertedDescription = convertDescriptionToSentenceCase(newDescription);
+        if (convertedDescription !== newDescription) {
+          newDescription = convertedDescription;
+          wasModified = true;
+        }
+      }
+
+      // Apply changes if modified
+      if (wasModified && newDescription !== originalDescription) {
+        variable.description = newDescription;
+        fixedCount++;
       }
     }
   }
 
   return { fixedCount };
+}
+
+/**
+ * Generates a CSS token name and human description from a Figma variable path.
+ * 
+ * Examples:
+ * - "color/background/soft/default/primary" → "--color-background-primary-soft"
+ * - "component/checkbox/border" → "--checkbox-border-color"
+ * - "component/input/border/outline/default" → "--input-outline-border-color"
+ */
+function generateDescriptionFromPath(
+  variablePath: string,
+  resolvedType: VariableResolvedDataType
+): { tokenName: string; humanDescription: string } | null {
+  const parts = variablePath.split('/').map(p => p.toLowerCase().trim());
+
+  if (parts.length < 2) return null;
+
+  const isColor = resolvedType === 'COLOR';
+  const isNumber = resolvedType === 'FLOAT';
+
+  // Handle component-specific tokens
+  if (parts[0] === 'component') {
+    return generateComponentToken(parts.slice(1), isColor);
+  }
+
+  // Handle semantic color tokens
+  if (parts[0] === 'color' && isColor) {
+    return generateSemanticColorToken(parts.slice(1));
+  }
+
+  // Handle sizing tokens
+  if (isNumber) {
+    return generateSizingToken(parts);
+  }
+
+  return null;
+}
+
+/**
+ * Generates tokens for component-specific variables
+ * e.g., "checkbox/border" → "--checkbox-border-color"
+ */
+function generateComponentToken(
+  parts: string[],
+  isColor: boolean
+): { tokenName: string; humanDescription: string } {
+  const componentName = parts[0]; // e.g., "checkbox", "input", "radio"
+  const propertyParts = parts.slice(1); // e.g., ["border", "hover"]
+
+  // Build token name
+  let tokenParts = [componentName, ...propertyParts];
+
+  // Add "-color" suffix for color tokens if not already present
+  if (isColor && !tokenParts.some(p => p === 'color')) {
+    tokenParts.push('color');
+  }
+
+  const tokenName = '--' + tokenParts.join('-');
+
+  // Build human description
+  const descriptions: Record<string, string> = {
+    'border': 'border color',
+    'background': 'background color',
+    'foreground': 'foreground color',
+    'text': 'text color',
+    'hover': 'hover state',
+    'active': 'active/pressed state',
+    'focus': 'focus state',
+    'disabled': 'disabled state',
+    'selected': 'selected state',
+  };
+
+  const descParts: string[] = [];
+  descParts.push(componentName);
+
+  for (const part of propertyParts) {
+    if (descriptions[part]) {
+      descParts.push(descriptions[part]);
+    } else if (!['default', 'primary', 'secondary'].includes(part)) {
+      descParts.push(part);
+    }
+  }
+
+  return {
+    tokenName,
+    humanDescription: toSentenceCase(descParts.join(' '))
+  };
+}
+
+/**
+ * Generates tokens for semantic color variables
+ * e.g., "background/soft/default/primary" → "--color-background-primary-soft"
+ */
+function generateSemanticColorToken(
+  parts: string[]
+): { tokenName: string; humanDescription: string } {
+  // Extract category (background, text, border, ring, foreground)
+  const category = parts[0];
+
+  // Find intent (primary, secondary, danger, success, info, warning, caution, discovery)
+  const intents = ['primary', 'secondary', 'danger', 'success', 'info', 'warning', 'caution', 'discovery'];
+  const intent = parts.find(p => intents.includes(p)) || '';
+
+  // Find variant (soft, solid, outline, ghost, surface)
+  const variants = ['soft', 'solid', 'outline', 'ghost', 'surface'];
+  const variant = parts.find(p => variants.includes(p)) || '';
+
+  // Find state (hover, active, disabled, selected)
+  const states = ['hover', 'active', 'disabled', 'selected', 'focus'];
+  const state = parts.find(p => states.includes(p)) || '';
+
+  // Find modifiers (alpha, alt)
+  const modifiers = ['alpha', 'alt'];
+  const modifier = parts.find(p => modifiers.includes(p)) || '';
+
+  // Build token name: --color-{category}-{intent}-{variant}-{modifier}-{state}
+  const tokenParts = ['color', category];
+  if (intent) tokenParts.push(intent);
+  if (variant) tokenParts.push(variant);
+  if (modifier) tokenParts.push(modifier);
+  if (state) tokenParts.push(state);
+
+  const tokenName = '--' + tokenParts.join('-');
+
+  // Build human description
+  const descParts: string[] = [];
+  if (intent) descParts.push(intent);
+  if (variant) descParts.push(variant);
+  descParts.push(category);
+  if (modifier) descParts.push(`(${modifier})`);
+  if (state) descParts.push(state);
+
+  return {
+    tokenName,
+    humanDescription: toSentenceCase(descParts.join(' '))
+  };
+}
+
+/**
+ * Generates tokens for sizing variables
+ */
+function generateSizingToken(
+  parts: string[]
+): { tokenName: string; humanDescription: string } {
+  // Simple conversion: join all parts with dashes
+  const tokenName = '--' + parts.join('-');
+  const humanDescription = toSentenceCase(parts.join(' '));
+
+  return { tokenName, humanDescription };
+}
+
+/**
+ * Convert string to sentence case (only first letter uppercase)
+ */
+function toSentenceCase(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+/**
+ * Convert variable description to sentence case.
+ * Handles format: "--token-name\nHuman description" or just "Human description"
+ * Preserves the token name but converts description part to sentence case.
+ */
+function convertDescriptionToSentenceCase(description: string): string {
+  if (!description) return description;
+
+  // Check if description has a token name (starts with --)
+  if (description.startsWith('--')) {
+    const newlineIndex = description.indexOf('\n');
+    if (newlineIndex !== -1) {
+      // Format: "--token-name\nHuman description"
+      const tokenPart = description.substring(0, newlineIndex + 1);
+      const humanPart = description.substring(newlineIndex + 1);
+      return tokenPart + toSentenceCase(humanPart);
+    }
+    // Just a token name with no description
+    return description;
+  }
+
+  // No token name, just human description
+  return toSentenceCase(description);
 }
