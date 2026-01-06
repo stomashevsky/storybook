@@ -50,6 +50,8 @@ const COLORS = {
   gray900: { r: 0.1, g: 0.1, b: 0.1 },
   checkerLight: { r: 1, g: 1, b: 1 },
   checkerDark: { r: 0.9, g: 0.9, b: 0.9 },
+  // Alpha colors (RGBA)
+  grayAlpha08: { r: 0, g: 0, b: 0, a: 0.08 },
 };
 
 const LAYOUT = {
@@ -68,6 +70,20 @@ const LAYOUT = {
   pillHeight: 32,
   borderRadius: 8,
   tableGap: 80,
+  // Section styling
+  sectionPadding: 128,
+  sectionRadius: 20,
+  // Title styling (72px heading)
+  titlePaddingBottom: 8,
+  titleFontSize: 72,
+  titleLetterSpacing: -1.44,
+  // Subtitle styling (32px heading with gray bg)
+  subtitlePaddingTop: 96,
+  subtitlePaddingHorizontal: 12,
+  subtitlePaddingVertical: 16,
+  subtitleFontSize: 32,
+  subtitleLetterSpacing: -0.64,
+  subtitleLineHeight: 38,
 };
 
 const FONT = {
@@ -181,6 +197,12 @@ function getSubGroup(name: string): string {
 function getVariableBaseName(name: string): string {
   const parts = name.split('/');
   return parts[parts.length - 1];
+}
+
+// Convert text to Sentence case (first letter uppercase, rest lowercase)
+function toSentenceCase(text: string): string {
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 }
 
 interface ParsedDescription {
@@ -318,6 +340,223 @@ async function resolveValue(variable: Variable, modeId: string): Promise<Resolve
 // ============================================================================
 // Component Builders
 // ============================================================================
+
+// Apply root frame styles from Figma variables
+async function applyRootFrameStyles(root: FrameNode) {
+  // Find style variables from the library
+  const getVarByName = async (name: string) => {
+    const vars = await figma.variables.getLocalVariablesAsync();
+    return vars.find(v => v.name === name);
+  };
+
+  const radiusVar = await getVarByName('figma/section/radius');
+  const strokeWeightVar = await getVarByName('figma/section/stroke');
+  const bgVar = await getVarByName('figma/section/notes/background');
+  const strokeColorVar = await getVarByName('figma/section/notes/stroke');
+
+  root.layoutMode = 'VERTICAL';
+  root.primaryAxisSizingMode = 'AUTO';
+  root.counterAxisSizingMode = 'AUTO';
+
+  // Set corner radius with variable binding
+  if (radiusVar) {
+    root.setBoundVariable('topLeftRadius', radiusVar);
+    root.setBoundVariable('topRightRadius', radiusVar);
+    root.setBoundVariable('bottomLeftRadius', radiusVar);
+    root.setBoundVariable('bottomRightRadius', radiusVar);
+  } else {
+    root.cornerRadius = 20;
+  }
+
+  // Set background with variable binding
+  if (bgVar) {
+    root.fills = [{
+      type: 'SOLID',
+      color: COLORS.white,
+      boundVariables: { color: { type: 'VARIABLE_ALIAS', id: bgVar.id } }
+    }];
+  } else {
+    root.fills = [{ type: 'SOLID', color: COLORS.white }];
+  }
+
+  // Set stroke with variable binding
+  if (strokeColorVar) {
+    root.strokes = [{
+      type: 'SOLID',
+      color: { r: 0, g: 0, b: 0 },
+      opacity: 0.4,
+      boundVariables: { color: { type: 'VARIABLE_ALIAS', id: strokeColorVar.id } }
+    }];
+  } else {
+    root.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 }, opacity: 0.4 }];
+  }
+
+  // Set stroke weight with variable binding
+  if (strokeWeightVar) {
+    root.setBoundVariable('strokeWeight', strokeWeightVar);
+  } else {
+    root.strokeWeight = 1;
+  }
+
+  root.paddingLeft = 0;
+  root.paddingRight = 0;
+  root.paddingTop = 0;
+  root.paddingBottom = 0;
+}
+
+// Find .title component and create an instance with given text
+async function createTitleInstance(title: string): Promise<InstanceNode | FrameNode> {
+  // Load all pages to access components across the document
+  await figma.loadAllPagesAsync();
+
+  // Try to find .title component by ID first, then by name
+  let titleComponent = (await figma.getNodeByIdAsync('6151:90928')) as ComponentNode | null;
+  if (!titleComponent) {
+    titleComponent = figma.root.findOne(node =>
+      node.type === 'COMPONENT' && node.name === '.title'
+    ) as ComponentNode | null;
+  }
+
+  if (titleComponent) {
+    const instance = titleComponent.createInstance();
+    // Find text node inside and update it
+    const textNode = instance.findOne(node => node.type === 'TEXT') as TextNode | null;
+    if (textNode) {
+      await figma.loadFontAsync(textNode.fontName as FontName);
+      textNode.characters = title;
+    }
+    return instance;
+  }
+
+  // Fallback: create frame if component not found
+  const frame = figma.createFrame();
+  frame.name = '.title';
+  frame.layoutMode = 'HORIZONTAL';
+  frame.primaryAxisAlignItems = 'MIN';
+  frame.counterAxisAlignItems = 'CENTER';
+  frame.primaryAxisSizingMode = 'AUTO';
+  frame.counterAxisSizingMode = 'AUTO';
+  frame.paddingBottom = LAYOUT.titlePaddingBottom;
+  frame.fills = [];
+
+  const textNode = figma.createText();
+  textNode.characters = title;
+  textNode.fontSize = LAYOUT.titleFontSize;
+  textNode.fontName = FONT.familyBold;
+  textNode.fills = [{ type: 'SOLID', color: COLORS.black }];
+  textNode.letterSpacing = { value: LAYOUT.titleLetterSpacing, unit: 'PIXELS' };
+  textNode.lineHeight = { value: LAYOUT.titleFontSize, unit: 'PIXELS' };
+
+  frame.appendChild(textNode);
+  return frame;
+}
+
+// Find .subtitle component and create an instance with given text
+async function createSubtitleInstance(subtitle: string): Promise<InstanceNode | FrameNode> {
+  // Load all pages to access components across the document
+  await figma.loadAllPagesAsync();
+
+  // Try to find .subtitle component by ID first, then by name
+  let subtitleComponent = (await figma.getNodeByIdAsync('6194:43052')) as ComponentNode | null;
+  if (!subtitleComponent) {
+    subtitleComponent = figma.root.findOne(node =>
+      node.type === 'COMPONENT' && node.name === '.subtitle'
+    ) as ComponentNode | null;
+  }
+
+  if (subtitleComponent) {
+    const instance = subtitleComponent.createInstance();
+    // Find text node inside and update it
+    const textNode = instance.findOne(node => node.type === 'TEXT') as TextNode | null;
+    if (textNode) {
+      await figma.loadFontAsync(textNode.fontName as FontName);
+      textNode.characters = subtitle;
+    }
+    // Note: FILL width will be set by caller after appending to autolayout parent
+    return instance;
+  }
+
+  // Fallback: create frame if component not found
+  const outerFrame = figma.createFrame();
+  outerFrame.name = '.subtitle';
+  outerFrame.layoutMode = 'HORIZONTAL';
+  outerFrame.primaryAxisAlignItems = 'MIN';
+  outerFrame.counterAxisAlignItems = 'CENTER';
+  outerFrame.primaryAxisSizingMode = 'AUTO';
+  outerFrame.counterAxisSizingMode = 'AUTO';
+  outerFrame.paddingTop = LAYOUT.subtitlePaddingTop;
+  outerFrame.fills = [];
+
+  const innerFrame = figma.createFrame();
+  innerFrame.name = 'group';
+  innerFrame.layoutMode = 'HORIZONTAL';
+  innerFrame.primaryAxisAlignItems = 'MIN';
+  innerFrame.counterAxisAlignItems = 'CENTER';
+  outerFrame.appendChild(innerFrame);
+  innerFrame.layoutSizingHorizontal = 'FILL';
+  innerFrame.counterAxisSizingMode = 'AUTO';
+  innerFrame.paddingLeft = LAYOUT.subtitlePaddingHorizontal;
+  innerFrame.paddingRight = LAYOUT.subtitlePaddingHorizontal;
+  innerFrame.paddingTop = LAYOUT.subtitlePaddingVertical;
+  innerFrame.paddingBottom = LAYOUT.subtitlePaddingVertical;
+  innerFrame.fills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 }, opacity: 0.08 }];
+
+  const textNode = figma.createText();
+  textNode.characters = subtitle;
+  textNode.fontSize = LAYOUT.subtitleFontSize;
+  textNode.fontName = FONT.familySemiBold;
+  textNode.fills = [{ type: 'SOLID', color: COLORS.black }];
+  textNode.letterSpacing = { value: LAYOUT.subtitleLetterSpacing, unit: 'PIXELS' };
+  textNode.lineHeight = { value: LAYOUT.subtitleLineHeight, unit: 'PIXELS' };
+
+  innerFrame.appendChild(textNode);
+  return outerFrame;
+}
+
+// Find .subtitle component (Table small variant) and create instance
+async function createTableSmallSubtitleInstance(subtitle: string): Promise<InstanceNode | FrameNode> {
+  await figma.loadAllPagesAsync();
+
+  let subtitleComponent = (await figma.getNodeByIdAsync('6194:130146')) as ComponentNode | null;
+  if (!subtitleComponent) {
+    subtitleComponent = figma.root.findOne(node =>
+      node.type === 'COMPONENT' && node.name === '.subtitle'
+    ) as ComponentNode | null;
+  }
+
+  if (subtitleComponent) {
+    const instance = subtitleComponent.createInstance();
+    const textNode = instance.findOne(node => node.type === 'TEXT') as TextNode | null;
+    if (textNode) {
+      await figma.loadFontAsync(textNode.fontName as FontName);
+      textNode.characters = subtitle;
+    }
+    return instance;
+  }
+
+  // Fallback: create frame if component not found
+  const frame = figma.createFrame();
+  frame.name = 'Header Cell';
+  frame.layoutMode = 'HORIZONTAL';
+  frame.primaryAxisAlignItems = 'MIN';
+  frame.counterAxisAlignItems = 'CENTER';
+  frame.layoutSizingHorizontal = 'FIXED';
+  frame.counterAxisSizingMode = 'AUTO';
+  frame.paddingLeft = 12;
+  frame.paddingRight = 12;
+  frame.paddingTop = 16;
+  frame.paddingBottom = 16;
+  frame.fills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 }, opacity: 0.08 }];
+
+  const text = figma.createText();
+  text.characters = subtitle;
+  text.fontSize = 16;
+  text.fontName = FONT.familySemiBold;
+  text.fills = [{ type: 'SOLID', color: COLORS.black }];
+  frame.appendChild(text);
+
+  return frame;
+}
 
 // Calculate luminance to determine if color is light or dark
 function isLightColor(color: RGB | RGBA): boolean {
@@ -746,57 +985,22 @@ function createHeaderRow(modes: { modeId: string; name: string }[], visibility: 
   return row;
 }
 
-function createGroupHeader(groupName: string, totalWidth: number, visibility: ColumnVisibility): FrameNode {
-  const row = figma.createFrame();
-  row.name = `Group: ${groupName}`;
-  row.layoutMode = 'HORIZONTAL';
-  row.primaryAxisAlignItems = 'MIN';
-  row.counterAxisAlignItems = 'CENTER';
-  row.layoutSizingHorizontal = 'HUG';
-  row.layoutSizingVertical = 'FIXED';
-  row.resize(100, 96);
-  row.fills = [{ type: 'SOLID', color: COLORS.gray50 }];
-  row.paddingLeft = LAYOUT.cellPadding;
-  row.paddingRight = LAYOUT.cellPadding;
-
-  const textNode = figma.createText();
-  textNode.characters = groupName || 'Ungrouped';
-  textNode.fontSize = 40;
-  textNode.fontName = FONT.familySemiBold;
-  textNode.fills = [{ type: 'SOLID', color: COLORS.gray900 }];
-
-  row.appendChild(textNode);
-  return row;
+async function createGroupHeader(groupName: string, totalWidth: number, visibility: ColumnVisibility): Promise<InstanceNode | FrameNode> {
+  // Use .subtitle component instance for group headers
+  return await createSubtitleInstance(groupName || 'Ungrouped');
 }
 
-function createSubGroupHeader(fullGroupPath: string, totalWidth: number, visibility: ColumnVisibility): FrameNode {
-  const row = figma.createFrame();
-  row.name = `Sub-Group: ${fullGroupPath}`;
-  row.layoutMode = 'HORIZONTAL';
-  row.primaryAxisAlignItems = 'MIN';
-  row.counterAxisAlignItems = 'CENTER';
-  row.layoutSizingHorizontal = 'HUG';
-  row.layoutSizingVertical = 'FIXED';
-  row.resize(100, 96);
-  row.fills = [{ type: 'SOLID', color: COLORS.gray50 }];
-  row.paddingLeft = LAYOUT.cellPadding;
-  row.paddingRight = LAYOUT.cellPadding;
-
-  const textNode = figma.createText();
-  textNode.characters = fullGroupPath;
-  textNode.fontSize = 40;
-  textNode.fontName = FONT.familySemiBold;
-  textNode.fills = [{ type: 'SOLID', color: COLORS.gray900 }];
-
-  row.appendChild(textNode);
-  return row;
+async function createSubGroupHeader(fullGroupPath: string, totalWidth: number, visibility: ColumnVisibility): Promise<InstanceNode | FrameNode> {
+  // Use .subtitle component instance for sub-group headers
+  return await createSubtitleInstance(fullGroupPath);
 }
 
 async function createDataRow(
   variable: Variable,
   modes: { modeId: string; name: string }[],
   visibility: ColumnVisibility,
-  totalWidth: number
+  totalWidth: number,
+  columnWidths: typeof LAYOUT.columnWidths
 ): Promise<FrameNode> {
   const row = figma.createFrame();
   row.name = `Row: ${variable.name}`;
@@ -818,12 +1022,12 @@ async function createDataRow(
   row.strokeBottomWeight = 1;
 
   // Name column (plain text, base name only since group is in section header)
-  row.appendChild(createWrappingTextCell(getVariableBaseName(variable.name), LAYOUT.columnWidths.token, true));
+  row.appendChild(createWrappingTextCell(getVariableBaseName(variable.name), columnWidths.token, true));
 
   // Mode columns
   for (const mode of modes) {
     const resolvedValue = await resolveValue(variable, mode.modeId);
-    const valueCell = createValueCell(resolvedValue, LAYOUT.columnWidths.mode, variable.scopes);
+    const valueCell = createValueCell(resolvedValue, columnWidths.mode, variable.scopes);
     row.appendChild(valueCell);
   }
 
@@ -876,30 +1080,26 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
   const variables = await getVariablesForCollection(collectionId);
   const modes = collection.modes.map(m => ({ modeId: m.modeId, name: m.name }));
 
-  // Create main table frame
-  const table = figma.createFrame();
-  table.name = `Base UI: ${collection.name}`;
-  table.layoutMode = 'VERTICAL';
-  table.primaryAxisSizingMode = 'AUTO';
-  table.counterAxisSizingMode = 'AUTO';
-  table.paddingLeft = 40;
-  table.paddingRight = 40;
-  table.paddingTop = 40;
-  table.paddingBottom = 40;
-  table.fills = [{ type: 'SOLID', color: COLORS.white }];
-  table.cornerRadius = 24;
-  table.clipsContent = false;
-  table.strokes = [];
-  table.strokeWeight = 0;
-  table.effects = [{
-    type: 'DROP_SHADOW',
-    color: { r: 0, g: 0, b: 0, a: 0.19 },
-    offset: { x: 0, y: 8 },
-    radius: 16,
-    spread: -4,
-    visible: true,
-    blendMode: 'NORMAL',
-  }];
+  // Create autolayout frame as root
+  const root = figma.createFrame();
+  root.name = `Base UI: ${collection.name}`;
+
+  await applyRootFrameStyles(root);
+
+  // Create inner group frame for autolayout content
+  const group = figma.createFrame();
+  group.name = 'group';
+  group.layoutMode = 'VERTICAL';
+  group.primaryAxisSizingMode = 'AUTO';
+  group.counterAxisSizingMode = 'AUTO';
+  group.paddingLeft = LAYOUT.sectionPadding;
+  group.paddingRight = LAYOUT.sectionPadding;
+  group.paddingTop = LAYOUT.sectionPadding;
+  group.paddingBottom = LAYOUT.sectionPadding;
+  group.fills = [];
+  group.clipsContent = false;
+
+
 
   // Get variables in Figma's original order (based on collection.variableIds)
   const orderedVariables: Variable[] = [];
@@ -931,33 +1131,24 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
 
   const visibility: ColumnVisibility = { showDescription, showScope, showTokenRef };
 
+  // Calculate dynamic column widths based on collection name
+  const isColorCollection = collection.name.toLowerCase().includes('color');
+  const columnWidths = {
+    ...LAYOUT.columnWidths,
+    token: isColorCollection ? LAYOUT.columnWidths.token : 120,
+    mode: isColorCollection ? LAYOUT.columnWidths.mode : 120,
+  };
+
   // Calculate total table width (accounting for hidden columns)
-  let totalWidth = LAYOUT.columnWidths.token + (modes.length * LAYOUT.columnWidths.mode);
-  if (showDescription) totalWidth += LAYOUT.columnWidths.description;
-  if (showScope) totalWidth += LAYOUT.columnWidths.scope;
-  if (showTokenRef) totalWidth += LAYOUT.columnWidths.cssToken;
+  let totalWidth = columnWidths.token + (modes.length * columnWidths.mode);
+  if (showDescription) totalWidth += columnWidths.description;
+  if (showScope) totalWidth += columnWidths.scope;
+  if (showTokenRef) totalWidth += columnWidths.cssToken;
 
-  // Add title with correct width
-  const titleFrame = figma.createFrame();
-  titleFrame.name = 'Title';
-  titleFrame.layoutMode = 'HORIZONTAL';
-  titleFrame.primaryAxisAlignItems = 'MIN';
-  titleFrame.counterAxisAlignItems = 'CENTER';
-  titleFrame.primaryAxisSizingMode = 'AUTO';
-  titleFrame.counterAxisSizingMode = 'AUTO';
-  titleFrame.paddingBottom = 80;
-  titleFrame.fills = [];
-
-  const titleText = figma.createText();
-  titleText.characters = collection.name;
-  titleText.fontSize = FONT.size.title;
-  titleText.fontName = FONT.familyBold;
-  titleText.fills = [{ type: 'SOLID', color: COLORS.black }];
-  titleText.letterSpacing = { value: -1.44, unit: 'PIXELS' };
-  titleText.lineHeight = { value: FONT.size.title, unit: 'PIXELS' };
-  titleFrame.appendChild(titleText);
-
-  table.appendChild(titleFrame);
+  // Add title component with Sentence case collection name
+  const titleComponent = await createTitleInstance(toSentenceCase(collection.name));
+  group.appendChild(titleComponent);
+  titleComponent.layoutSizingHorizontal = 'FILL';
 
   // Group variables by first-level group (preserving order)
   const firstLevelGroups = new Map<string, Variable[]>();
@@ -981,7 +1172,7 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
   contentFrame.fills = [];
   contentFrame.clipsContent = false;
 
-  table.appendChild(contentFrame);
+  group.appendChild(contentFrame);
 
   // Create a vertical column for each first-level group
   for (const [firstLevelName, groupVariables] of firstLevelGroups) {
@@ -1014,7 +1205,7 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
 
     // Add column header only if there are direct variables in this group
     if (hasDirectVariables || !hasSubGroups) {
-      const columnHeader = createGroupHeader(firstLevelName, totalWidth, visibility);
+      const columnHeader = await createGroupHeader(firstLevelName, totalWidth, visibility);
       column.appendChild(columnHeader);
       columnHeader.layoutSizingHorizontal = 'FILL';
     }
@@ -1040,14 +1231,14 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
         // Add sub-group header if there's a sub-group name
         if (subGroupName !== '') {
           const fullGroupPath = `${firstLevelName}/${subGroupName}`;
-          const subHeader = createSubGroupHeader(fullGroupPath, totalWidth, visibility);
+          const subHeader = await createSubGroupHeader(fullGroupPath, totalWidth, visibility);
           column.appendChild(subHeader);
           subHeader.layoutSizingHorizontal = 'FILL';
         }
 
         // Add data rows
         for (const variable of subGroupVars) {
-          const dataRow = await createDataRow(variable, modes, visibility, totalWidth);
+          const dataRow = await createDataRow(variable, modes, visibility, totalWidth, columnWidths);
           column.appendChild(dataRow);
           dataRow.layoutSizingHorizontal = 'FILL';
         }
@@ -1055,7 +1246,7 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
     } else {
       // No sub-groups, just add rows directly
       for (const variable of groupVariables) {
-        const dataRow = await createDataRow(variable, modes, visibility, totalWidth);
+        const dataRow = await createDataRow(variable, modes, visibility, totalWidth, columnWidths);
         column.appendChild(dataRow);
         dataRow.layoutSizingHorizontal = 'FILL';
       }
@@ -1064,7 +1255,8 @@ async function generateTable(collectionId: string): Promise<FrameNode> {
     contentFrame.appendChild(column);
   }
 
-  return table;
+  root.appendChild(group);
+  return root;
 }
 
 // ============================================================================
@@ -1133,28 +1325,25 @@ async function generateTypographyTable(): Promise<FrameNode> {
     return getWeight(b.fontName.style) - getWeight(a.fontName.style);
   });
 
-  // Create main table frame with same styling as variable tables
-  const table = figma.createFrame();
-  table.name = 'Base UI: text styles';
-  table.layoutMode = 'VERTICAL';
-  table.primaryAxisSizingMode = 'AUTO';
-  table.counterAxisSizingMode = 'AUTO';
-  table.paddingLeft = 40;
-  table.paddingRight = 40;
-  table.paddingTop = 40;
-  table.paddingBottom = 40;
-  table.fills = [{ type: 'SOLID', color: COLORS.white }];
-  table.cornerRadius = 24;
-  table.clipsContent = false;
-  table.effects = [{
-    type: 'DROP_SHADOW',
-    color: { r: 0, g: 0, b: 0, a: 0.19 },
-    offset: { x: 0, y: 8 },
-    radius: 16,
-    spread: -4,
-    visible: true,
-    blendMode: 'NORMAL',
-  }];
+  // Create root frame
+  const root = figma.createFrame();
+  root.name = 'Base UI: text styles';
+
+  await applyRootFrameStyles(root);
+
+  // Create inner group frame for autolayout content
+  const group = figma.createFrame();
+  group.name = 'group';
+  group.layoutMode = 'VERTICAL';
+  group.primaryAxisSizingMode = 'AUTO';
+  group.counterAxisSizingMode = 'AUTO';
+  group.paddingLeft = LAYOUT.sectionPadding;
+  group.paddingRight = LAYOUT.sectionPadding;
+  group.paddingTop = LAYOUT.sectionPadding;
+  group.paddingBottom = LAYOUT.sectionPadding;
+  group.fills = [];
+  group.clipsContent = false;
+  root.appendChild(group);
 
   // Column widths for typography table
   const TYPO_COLUMNS = {
@@ -1168,68 +1357,37 @@ async function generateTypographyTable(): Promise<FrameNode> {
   };
   const totalWidth = TYPO_COLUMNS.name + TYPO_COLUMNS.size + TYPO_COLUMNS.weight + TYPO_COLUMNS.trackingPx + TYPO_COLUMNS.trackingEm + TYPO_COLUMNS.line + TYPO_COLUMNS.example;
 
-  // Add title
-  const titleFrame = figma.createFrame();
-  titleFrame.name = 'Title';
-  titleFrame.layoutMode = 'HORIZONTAL';
-  titleFrame.primaryAxisAlignItems = 'MIN';
-  titleFrame.counterAxisAlignItems = 'CENTER';
-  titleFrame.primaryAxisSizingMode = 'AUTO';
-  titleFrame.counterAxisSizingMode = 'AUTO';
-  titleFrame.paddingBottom = 80;
-  titleFrame.fills = [];
+  // Add title (using .title instance)
+  const titleInstance = await createTitleInstance('Text styles');
+  group.appendChild(titleInstance);
+  titleInstance.layoutSizingHorizontal = 'FILL';
 
-  const titleText = figma.createText();
-  titleText.characters = 'text styles';
-  titleText.fontSize = FONT.size.title;
-  titleText.fontName = FONT.familyBold;
-  titleText.fills = [{ type: 'SOLID', color: COLORS.black }];
-  titleText.letterSpacing = { value: -1.44, unit: 'PIXELS' };
-  titleText.lineHeight = { value: FONT.size.title, unit: 'PIXELS' };
-  titleFrame.appendChild(titleText);
-  table.appendChild(titleFrame);
-
-  // Add header row (styled like group headers in variable tables)
+  // Add header row (using .subtitle Table small instances)
   const headerRow = figma.createFrame();
   headerRow.name = 'Header Row';
   headerRow.layoutMode = 'HORIZONTAL';
   headerRow.primaryAxisAlignItems = 'MIN';
   headerRow.counterAxisAlignItems = 'CENTER';
   headerRow.primaryAxisSizingMode = 'AUTO';
-  headerRow.counterAxisSizingMode = 'FIXED';
-  headerRow.resize(totalWidth, LAYOUT.rowHeight);
-  headerRow.fills = [{ type: 'SOLID', color: COLORS.gray50 }];
-  headerRow.paddingLeft = 16;
-  headerRow.paddingRight = 16;
+  headerRow.counterAxisSizingMode = 'AUTO';
+  headerRow.fills = [];
 
-  const createHeaderCell = (text: string, width: number): FrameNode => {
-    const cell = figma.createFrame();
-    cell.name = `Header: ${text}`;
-    cell.layoutMode = 'HORIZONTAL';
-    cell.primaryAxisAlignItems = 'MIN';
-    cell.counterAxisAlignItems = 'CENTER';
-    cell.primaryAxisSizingMode = 'FIXED';
-    cell.counterAxisSizingMode = 'AUTO';
-    cell.resize(width, 24);
-    cell.fills = [];
+  const headers = ['Name', 'Size', 'Weight', 'Tracking (px)', 'Tracking (em)', 'Line', 'Example'];
+  const widths = [TYPO_COLUMNS.name, TYPO_COLUMNS.size, TYPO_COLUMNS.weight, TYPO_COLUMNS.trackingPx, TYPO_COLUMNS.trackingEm, TYPO_COLUMNS.line, TYPO_COLUMNS.example];
 
-    const label = figma.createText();
-    label.characters = text;
-    label.fontSize = 16;
-    label.fontName = FONT.familySemiBold;
-    label.fills = [{ type: 'SOLID', color: COLORS.gray900 }];
-    cell.appendChild(label);
-    return cell;
-  };
+  for (let i = 0; i < headers.length; i++) {
+    const subtitleInstance = await createTableSmallSubtitleInstance(headers[i]);
+    headerRow.appendChild(subtitleInstance);
 
-  headerRow.appendChild(createHeaderCell('Name', TYPO_COLUMNS.name));
-  headerRow.appendChild(createHeaderCell('Size', TYPO_COLUMNS.size));
-  headerRow.appendChild(createHeaderCell('Weight', TYPO_COLUMNS.weight));
-  headerRow.appendChild(createHeaderCell('Tracking (px)', TYPO_COLUMNS.trackingPx));
-  headerRow.appendChild(createHeaderCell('Tracking (em)', TYPO_COLUMNS.trackingEm));
-  headerRow.appendChild(createHeaderCell('Line', TYPO_COLUMNS.line));
-  headerRow.appendChild(createHeaderCell('Example', TYPO_COLUMNS.example));
-  table.appendChild(headerRow);
+    if (headers[i] === 'Example') {
+      subtitleInstance.layoutSizingHorizontal = 'FILL';
+    } else {
+      subtitleInstance.resize(widths[i], subtitleInstance.height);
+      subtitleInstance.layoutSizingHorizontal = 'FIXED';
+    }
+  }
+
+  group.appendChild(headerRow);
   headerRow.layoutSizingHorizontal = 'FILL';
 
   // Sample paragraph for text normal styles with small font sizes
@@ -1279,11 +1437,12 @@ async function generateTypographyTable(): Promise<FrameNode> {
     const isNormalWeightCheck = weightLowerCheck.includes('regular') || weightLowerCheck.includes('normal');
     const willShowParagraph = !isHeadingCheck && !isTabularCheck && isNormalWeightCheck && style.fontSize <= 18;
 
+    const finalExampleText = willShowParagraph ? `Body text example\n${exampleText}` : exampleText;
+
     // Create example text (auto width for non-paragraph, fixed width for paragraph)
     const exampleTextNode = figma.createText();
-    exampleTextNode.characters = exampleText;
-    exampleTextNode.fontSize = style.fontSize;
-    exampleTextNode.fontName = style.fontName;
+    await exampleTextNode.setTextStyleIdAsync(style.id);
+    exampleTextNode.characters = finalExampleText;
     exampleTextNode.fills = [{ type: 'SOLID', color: COLORS.gray900 }];
 
     if (willShowParagraph) {
@@ -1419,7 +1578,7 @@ async function generateTypographyTable(): Promise<FrameNode> {
     lineCell.appendChild(createPill(lineHeightStr, 'value'));
     row.appendChild(lineCell);
 
-    // Example cell - rendered at actual font size (last column, auto width)
+    // Example cell - rendered at actual font size (last column, hug so it expands)
     const exampleCell = figma.createFrame();
     exampleCell.name = `Example: ${style.name}`;
     exampleCell.layoutMode = 'VERTICAL';
@@ -1428,7 +1587,7 @@ async function generateTypographyTable(): Promise<FrameNode> {
     exampleCell.itemSpacing = 8;
     exampleCell.layoutSizingHorizontal = 'HUG';
     exampleCell.layoutSizingVertical = 'FIXED';
-    exampleCell.resize(100, rowHeight);
+    exampleCell.resize(exampleCell.width, rowHeight);
     exampleCell.paddingLeft = LAYOUT.cellPadding;
     exampleCell.paddingRight = LAYOUT.cellPadding;
     exampleCell.clipsContent = false;
@@ -1442,23 +1601,13 @@ async function generateTypographyTable(): Promise<FrameNode> {
     const isNormalWeight = weightLower.includes('regular') || weightLower.includes('normal');
     const showParagraph = !isHeading && !isTabular && isNormalWeight && style.fontSize <= 18;
 
-    if (showParagraph) {
-      // Add "Body text example" title above paragraph
-      const titleTextNode = figma.createText();
-      titleTextNode.characters = 'Body text example';
-      titleTextNode.fontSize = style.fontSize;
-      titleTextNode.fontName = style.fontName;
-      titleTextNode.fills = [{ type: 'SOLID', color: COLORS.gray900 }];
-      exampleCell.appendChild(titleTextNode);
-    }
-
     exampleCell.appendChild(exampleTextNode);
     row.appendChild(exampleCell);
 
-    table.appendChild(row);
+    group.appendChild(row);
   }
 
-  return table;
+  return root;
 }
 
 // ============================================================================
@@ -2020,13 +2169,7 @@ function generateSizingToken(
   return { tokenName, humanDescription };
 }
 
-/**
- * Convert string to sentence case (only first letter uppercase)
- */
-function toSentenceCase(str: string): string {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-}
+
 
 /**
  * Convert variable description to sentence case.
