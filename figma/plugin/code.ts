@@ -278,62 +278,114 @@ async function getVariablesForCollection(collectionId: string): Promise<Variable
   return allVariables.filter(v => v.variableCollectionId === collectionId);
 }
 
-async function resolveValue(variable: Variable, modeId: string): Promise<ResolvedValue> {
-  const value = variable.valuesByMode[modeId];
+async function resolveValue(variable: Variable, modeId: string, modeName: string): Promise<ResolvedValue> {
+  // Cache for collections to avoid redundant async calls
+  const collectionCache = new Map<string, VariableCollection>();
 
-  // Handle null/undefined values
-  if (value === null || value === undefined) {
+  // Helper to find mode ID by name in a collection
+  const findModeIdByName = async (collectionId: string, targetModeName: string): Promise<string | null> => {
+    let collection = collectionCache.get(collectionId);
+    if (!collection) {
+      const fetchedCollection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+      if (fetchedCollection) {
+        collection = fetchedCollection;
+        collectionCache.set(collectionId, collection);
+      }
+    }
+    if (!collection) {
+      console.log('  [DEBUG] Collection not found:', collectionId);
+      return null;
+    }
+
+    const normalizedTargetName = targetModeName.trim().toLowerCase();
+
+    // 1. Exact name match
+    const exactMatch = collection.modes.find(m => m.name.trim().toLowerCase() === normalizedTargetName);
+    if (exactMatch) return exactMatch.modeId;
+
+    // 2. Fuzzy match (contains)
+    const fuzzyMatch = collection.modes.find(m => m.name.trim().toLowerCase().includes(normalizedTargetName));
+    if (fuzzyMatch) return fuzzyMatch.modeId;
+
+    // 3. Single-mode collection - use that mode
+    if (collection.modes.length === 1) return collection.modes[0].modeId;
+
+    // 4. Fallback to first mode
+    return collection.modes[0]?.modeId || null;
+  };
+
+  // Start with the initial value for the given mode
+  let currentValue = variable.valuesByMode[modeId];
+
+  // Track the first alias for display purposes
+  let firstAliasName: string | undefined;
+  let firstAliasId: string | undefined;
+  let currentModeName = modeName;
+  let depth = 0;
+  const maxDepth = 10;
+
+  // Resolve alias chain
+  while (depth < maxDepth && currentValue && typeof currentValue === 'object' && 'type' in currentValue && currentValue.type === 'VARIABLE_ALIAS') {
+    const aliasedVar = await figma.variables.getVariableByIdAsync(currentValue.id);
+    if (!aliasedVar) {
+      console.log('  [DEBUG] Aliased variable not found:', currentValue.id);
+      break;
+    }
+
+    // Store first alias info for display
+    if (depth === 0) {
+      firstAliasName = aliasedVar.name;
+      firstAliasId = aliasedVar.id;
+    }
+
+    // Find the correct mode ID in the aliased variable's collection
+    const targetModeId = await findModeIdByName(aliasedVar.variableCollectionId, currentModeName);
+    if (!targetModeId) {
+      console.log('  [DEBUG] Mode not found for:', aliasedVar.name, 'in collection:', aliasedVar.variableCollectionId);
+      break;
+    }
+
+    // Get the value from the aliased variable for that mode
+    currentValue = aliasedVar.valuesByMode[targetModeId];
+
+    // If no value for that mode, try first available mode
+    if (currentValue === undefined) {
+      const modeIds = Object.keys(aliasedVar.valuesByMode);
+      if (modeIds.length > 0) {
+        currentValue = aliasedVar.valuesByMode[modeIds[0]];
+      }
+    }
+
+    depth++;
+  }
+
+  // Check if we resolved to a primitive value
+  const isResolved = currentValue !== null &&
+    currentValue !== undefined &&
+    !(typeof currentValue === 'object' && 'type' in currentValue && currentValue.type === 'VARIABLE_ALIAS');
+
+  if (isResolved) {
     return {
       type: variable.resolvedType,
-      value: variable.resolvedType === 'COLOR'
-        ? { r: 0, g: 0, b: 0 }
-        : variable.resolvedType === 'FLOAT'
-          ? 0
-          : '',
-      isAlias: false,
+      value: currentValue as RGB | RGBA | number | string | boolean,
+      isAlias: firstAliasName !== undefined,
+      aliasName: firstAliasName,
+      aliasId: firstAliasId,
     };
   }
 
-  // Check if it's an alias
-  if (typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
-    const aliasedVar = await figma.variables.getVariableByIdAsync(value.id);
-    if (aliasedVar) {
-      // Get the resolved value from the aliased variable - try the same mode first, then first available mode
-      let resolvedVal = aliasedVar.valuesByMode[modeId];
-      if (resolvedVal === undefined) {
-        // Mode doesn't exist in aliased var, get first available mode's value
-        const modeIds = Object.keys(aliasedVar.valuesByMode);
-        if (modeIds.length > 0) {
-          resolvedVal = aliasedVar.valuesByMode[modeIds[0]];
-        }
-      }
-
-      // If resolved value is also an alias, we need to resolve it recursively
-      if (resolvedVal && typeof resolvedVal === 'object' && 'type' in resolvedVal && resolvedVal.type === 'VARIABLE_ALIAS') {
-        // For now, just return the alias reference - deep resolution would be complex
-        return {
-          type: variable.resolvedType,
-          value: variable.resolvedType === 'COLOR' ? { r: 0.5, g: 0.5, b: 0.5 } : 0,
-          isAlias: true,
-          aliasName: aliasedVar.name,
-          aliasId: aliasedVar.id,
-        };
-      }
-
-      return {
-        type: variable.resolvedType,
-        value: resolvedVal as RGB | RGBA | number | string | boolean,
-        isAlias: true,
-        aliasName: aliasedVar.name,
-        aliasId: aliasedVar.id,
-      };
-    }
-  }
-
+  // Resolution failed - return fallback
+  console.log('[WARN] Resolution failed for:', variable.name, 'mode:', modeName, 'depth reached:', depth);
   return {
     type: variable.resolvedType,
-    value: value as RGB | RGBA | number | string | boolean,
-    isAlias: false,
+    value: variable.resolvedType === 'COLOR'
+      ? { r: 1, g: 0, b: 1 } // Return MAGENTA for failed resolution (visible debug color)
+      : variable.resolvedType === 'FLOAT'
+        ? 0
+        : '',
+    isAlias: firstAliasName !== undefined,
+    aliasName: firstAliasName,
+    aliasId: firstAliasId,
   };
 }
 
@@ -1026,7 +1078,7 @@ async function createDataRow(
 
   // Mode columns
   for (const mode of modes) {
-    const resolvedValue = await resolveValue(variable, mode.modeId);
+    const resolvedValue = await resolveValue(variable, mode.modeId, mode.name);
     const valueCell = createValueCell(resolvedValue, columnWidths.mode, variable.scopes);
     row.appendChild(valueCell);
   }

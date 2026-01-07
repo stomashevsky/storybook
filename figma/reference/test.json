@@ -1,0 +1,64 @@
+[
+  {
+    "test": {
+      "modes": {
+        "Light": {
+          "folder 1": {
+            "color 1": {
+              "$scopes": [
+                "FRAME_FILL",
+                "SHAPE_FILL"
+              ],
+              "$description": "--color-background-primary-solid\nButton primary solid background",
+              "$type": "color",
+              "$libraryName": "",
+              "$collectionName": "color primitive",
+              "$value": "{gray.900}"
+            }
+          },
+          "folder 2": {
+            "color 2": {
+              "$scopes": [
+                "FRAME_FILL",
+                "SHAPE_FILL"
+              ],
+              "$description": "Checkbox active/pressed state background color",
+              "$type": "color",
+              "$libraryName": "",
+              "$collectionName": "test",
+              "$value": "{folder 1.color 1}"
+            }
+          }
+        },
+        "Dark": {
+          "folder 1": {
+            "color 1": {
+              "$scopes": [
+                "FRAME_FILL",
+                "SHAPE_FILL"
+              ],
+              "$description": "--color-background-primary-solid\nButton primary solid background",
+              "$type": "color",
+              "$libraryName": "",
+              "$collectionName": "color primitive",
+              "$value": "{gray dark.950}"
+            }
+          },
+          "folder 2": {
+            "color 2": {
+              "$scopes": [
+                "FRAME_FILL",
+                "SHAPE_FILL"
+              ],
+              "$description": "Checkbox active/pressed state background color",
+              "$type": "color",
+              "$libraryName": "",
+              "$collectionName": "test",
+              "$value": "{folder 1.color 1}"
+            }
+          }
+        }
+      }
+    }
+  }
+]
